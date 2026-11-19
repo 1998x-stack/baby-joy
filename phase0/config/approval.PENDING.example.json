@@ -1,0 +1,13 @@
+{
+  "model_id": "echomimic_v3_flash",
+  "decision": "PENDING",
+  "reviewer": "",
+  "review_date": "",
+  "evidence_urls": [],
+  "code_license": "PENDING",
+  "model_weights_license": "PENDING",
+  "base_model_license": "PENDING",
+  "audio_encoder_license": "PENDING",
+  "commercial_api_allowed": false,
+  "notes": "Never change to RESEARCH_APPROVED or COMMERCIAL_APPROVED without evidence and authorized review"
+}

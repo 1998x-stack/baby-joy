@@ -25,3 +25,7 @@
 - Regression test:
 - Related PR / ADR:
 ```
+
+| G-006 | CONFIRMED | EchoMimicV3-Flash 官方 run_flash.sh 默认 81 帧 @25fps；infer_flash.py 按 video_length 截断输入语音 | 2026-11-19 核查上游 run_flash.sh 和 infer_flash.py | Phase0 按 WAV 帧长调整 video_length，ffprobe 校验；真实 6/8/12 秒 GPU 仍 NOT RUN |
+| G-007 | NOT RUN | 三个视频模型的真实 checkpoint、输出文件名与可用 GPU 尚未端到端检查 | Phase0 CLI 和单测仅提供参数合同 | 按 docs/15 和 phase0/README 在合法私有环境实测 |
+| G-008 | PENDING REVIEW | 研究运行审批 JSON 当前仅为人工声明，不能替代正式版权/未成年人数据审查 | G0 尚无由实际权利人/审核人签发的批准材料 | 人工复核原始许可、权重链、儿童照片授权后运行 |
