@@ -1,0 +1,14 @@
+{
+  "repo_dir": "/opt/vendor/InfiniteTalk",
+  "base_model_dir": "/opt/models/Wan2.1-I2V-14B-480P",
+  "audio_encoder_dir": "/opt/models/chinese-wav2vec2-base",
+  "transformer_path": "/opt/models/InfiniteTalk/single/infinitetalk.safetensors",
+  "approval_file": "/srv/babyjoy-private/approvals/infinitetalk.json",
+  "model_revision": "PIN_FULL_UPSTREAM_COMMIT_SHA",
+  "weights": [
+    {
+      "path": "/opt/models/InfiniteTalk/single/infinitetalk.safetensors",
+      "sha256": "REPLACE_WITH_REAL_FILE_SHA256"
+    }
+  ]
+}
