@@ -30,6 +30,7 @@ CREATE TABLE consents (
   evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
   granted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   revoked_at TIMESTAMPTZ,
+  UNIQUE (id, user_id),
   CHECK (revoked_at IS NULL OR revoked_at >= granted_at)
 );
 CREATE INDEX idx_consents_user_active ON consents(user_id, granted_at DESC)
@@ -78,7 +79,8 @@ CREATE TABLE jobs (
   finished_at TIMESTAMPTZ,
   expires_at TIMESTAMPTZ,
   UNIQUE (id, user_id),
-  FOREIGN KEY (input_asset_id, user_id) REFERENCES assets (id, user_id)
+  FOREIGN KEY (input_asset_id, user_id) REFERENCES assets (id, user_id),
+  FOREIGN KEY (consent_id, user_id) REFERENCES consents (id, user_id)
 );
 CREATE INDEX idx_jobs_user_created ON jobs(user_id, created_at DESC);
 CREATE INDEX idx_jobs_active_created ON jobs(status, created_at)
