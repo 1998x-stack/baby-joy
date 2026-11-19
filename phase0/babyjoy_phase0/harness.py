@@ -40,8 +40,13 @@ def load_json(path: Path) -> dict:
 def private_file(private_root: Path, relative: str, suffixes: tuple[str, ...]) -> Path:
     if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
         raise GateError("Private asset must have a relative path")
+    if ".." in Path(relative).parts:
+        raise GateError("Private asset may not traverse above private root")
     root = private_root.resolve(strict=True)
-    candidate = (root / relative).resolve(strict=True)
+    try:
+        candidate = (root / relative).resolve(strict=True)
+    except (OSError, FileNotFoundError) as exc:
+        raise GateError("Private asset is missing") from exc
     if not candidate.is_relative_to(root) or not candidate.is_file():
         raise GateError("Private asset is missing or escapes private root")
     if candidate.suffix.lower() not in suffixes:
@@ -253,6 +258,9 @@ def execute_run(model_id: str, config: dict, case: dict, output_root: Path, time
     """Fails closed without license review, checkpoint hashes and real GPU."""
     if model_id not in MODEL_IDS:
         raise GateError("Unknown model")
+    revision = config.get("model_revision")
+    if not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise GateError("Pin the full 40-hex upstream Git commit as model_revision")
     approval = check_approval(config, model_id)
     verified_weights = check_weights(config)
     gpu = check_gpu()
