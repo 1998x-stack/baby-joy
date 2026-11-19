@@ -33,3 +33,9 @@ weights/
 # Logs and OS
 *.log
 .DS_Store
+
+# Phase 0 private research cases, ratings, configs and GPU receipts
+phase0/private/
+phase0/runs/
+phase0/config/*.local.json
+benchmarks/raw/

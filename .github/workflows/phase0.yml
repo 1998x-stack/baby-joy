@@ -1,0 +1,31 @@
+name: Phase 0 CPU harness
+
+on:
+  push:
+    branches:
+      - 'feat/**'
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  phase0-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile Phase 0 harness
+        run: python -m compileall -q phase0
+      - name: CPU-only safety and adapter contract tests
+        env:
+          PYTHONPATH: phase0
+        run: python -m unittest discover -s phase0/tests -v
+      - name: Empty GPU evidence stays NOT RUN
+        env:
+          PYTHONPATH: phase0
+        run: |
+          output=$(python -m babyjoy_phase0.cli report --output-root /tmp/babyjoy-nonexistent-run-xyz)
+          echo "$output" | grep '"status": "NOT_RUN"'
