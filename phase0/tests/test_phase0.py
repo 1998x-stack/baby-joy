@@ -10,6 +10,7 @@ from babyjoy_phase0.cli import main
 from babyjoy_phase0.evaluation import summarize_ratings, wilson
 from babyjoy_phase0.harness import (
     GateError, build_command, check_approval, check_gpu, check_weights,
+    check_repo_revision, sample_gpu_used_mib,
     load_json, private_file, probe_video, read_cases, report,
 )
 
@@ -150,6 +151,19 @@ class Phase0HarnessTest(unittest.TestCase):
         self.assertIn("--audio", args)
         self.assertNotIn("--enable_tts", args)
         self.assertEqual(output.suffix, ".mp4")
+
+    def test_unpinned_source_blocked(self):
+        with self.assertRaises(GateError):
+            check_repo_revision(self.vendor, "NOT_A_SHA")
+
+    def test_fake_git_directory_blocked(self):
+        with self.assertRaises(GateError):
+            check_repo_revision(self.vendor, "f" * 40)
+
+    def test_gpu_sample_not_fabricated_without_utility(self):
+        # On CPU CI this will be None; on GPU-backed runners it may be an integer.
+        value = sample_gpu_used_mib()
+        self.assertTrue(value is None or (type(value) is int and value >= 0))
 
     def test_empty_run_report_not_run(self):
         self.assertEqual(report(self.root / "nonexistent")["status"], "NOT_RUN")

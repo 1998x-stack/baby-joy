@@ -9,6 +9,7 @@ import sys
 from .evaluation import summarize_ratings
 from .harness import (
     GateError, MODEL_IDS, check_approval, check_gpu, check_weights,
+    check_repo_revision, checked_model_path,
     execute_run, load_json, read_cases, report,
 )
 
@@ -47,6 +48,8 @@ def main(argv: list[str] | None = None) -> int:
             result = {"status": "VALIDATED", "authorized_cases": len(read_cases(args.private_root, args.cases))}
         elif args.command == "preflight":
             config = load_json(args.config)
+            check_repo_revision(checked_model_path(config, "repo_dir"),
+                                config.get("model_revision"))
             approval = check_approval(config, args.model)
             weights = check_weights(config)
             gpu = check_gpu()

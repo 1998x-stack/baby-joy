@@ -22,7 +22,7 @@ Base: `a209278e7a0c6d9c163b464f24b0cdf32506bf58`（PR #1 蓝图分支）
 | G0 资源 | 可用 NVIDIA GPU、driver、CUDA、独立 Conda 环境、ffprobe、完整权重 manifest | NOT RUN |
 | G1 时长 | 6/8/12 秒中文 WAV 三模型生成视频，验证 0.30 秒时长容差 | NOT RUN |
 | G1 视觉 | ≥30 有授权照片；婴儿身份相似度、嘴型、眨眼、严重缺陷、盲评 | NOT RUN |
-| G1 成本 | 冷/热推理耗时、GPU 显存峰值（尚需加采样器）、失败重试摊销 | NOT RUN |
+| G1 成本 | 冷/热推理耗时、GPU 专属显存峰值（目前仅采样系统显存）、失败重试摊销 | NOT RUN |
 | G1 决策 | 统一分母、分层、Gate 规则以及独立复核人签字 | BLOCKED |
 
 ## 与原 Phase 0 计划的差异
@@ -34,3 +34,8 @@ Base: `a209278e7a0c6d9c163b464f24b0cdf32506bf58`（PR #1 蓝图分支）
 3. 收到官方代码/脚本版本更新可能破坏输出命名约定；必须 pin 上游 Git commit 并保持回归测试。
 4. 商用许可证不能只用仓库 license；底座/音频 encoder/预训练权重/TTS 声库需分别审核。
 5. G1 “仍像自己的宝宝”需要家长盲评，不能直接由成人脸部相似度模型做自动放行。
+
+## 首轮工程 CI 证据
+- `https://github.com/1998x-stack/baby-joy/actions/runs/44484110106`
+- Python 3.11，21 个 CPU-only unittest：PASS；编译检查与空报告 NOT_RUN 约束：PASS。
+- 之后新增上游 Git revision 和显存采样测试，**最新提交需重新检查 CI**。

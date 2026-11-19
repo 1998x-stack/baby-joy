@@ -147,6 +147,39 @@ def check_weights(config: dict) -> list[dict]:
     return verified
 
 
+def check_repo_revision(repo_dir: Path, expected: str) -> None:
+    """Pin exact upstream source and reject modified vendor inference scripts."""
+    if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{40}", expected):
+        raise GateError("Pin the full 40-hex upstream Git commit as model_revision")
+    if not shutil.which("git"):
+        raise GateError("git is required to verify upstream model source")
+    rev = subprocess.run(["git", "-C", str(repo_dir), "rev-parse", "HEAD"],
+                         capture_output=True, text=True, timeout=15, check=False)
+    if rev.returncode or rev.stdout.strip() != expected:
+        raise GateError("Upstream checkout does not match pinned model revision")
+    dirty = subprocess.run(["git", "-C", str(repo_dir), "status", "--porcelain",
+                            "--untracked-files=no"],
+                           capture_output=True, text=True, timeout=15, check=False)
+    if dirty.returncode or dirty.stdout.strip():
+        raise GateError("Upstream tracked files modified; refusing unpinned inference")
+
+
+def sample_gpu_used_mib() -> int | None:
+    """Total allocated memory across visible physical GPUs; not per-model peak."""
+    if not shutil.which("nvidia-smi"):
+        return None
+    try:
+        result = subprocess.run(["nvidia-smi", "--query-gpu=memory.used",
+                                 "--format=csv,noheader,nounits"],
+                                text=True, capture_output=True, timeout=10, check=False)
+        if result.returncode:
+            return None
+        values = [int(line.strip()) for line in result.stdout.splitlines() if line.strip()]
+        return sum(values) if values else None
+    except (ValueError, OSError, subprocess.TimeoutExpired):
+        return None
+
+
 def check_gpu() -> str:
     if not shutil.which("nvidia-smi"):
         raise GateError("No nvidia-smi available: real GPU inference NOT RUN")
@@ -258,9 +291,8 @@ def execute_run(model_id: str, config: dict, case: dict, output_root: Path, time
     """Fails closed without license review, checkpoint hashes and real GPU."""
     if model_id not in MODEL_IDS:
         raise GateError("Unknown model")
-    revision = config.get("model_revision")
-    if not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{40}", revision):
-        raise GateError("Pin the full 40-hex upstream Git commit as model_revision")
+    check_repo_revision(checked_model_path(config, "repo_dir"),
+                        config.get("model_revision"))
     approval = check_approval(config, model_id)
     verified_weights = check_weights(config)
     gpu = check_gpu()
@@ -286,16 +318,23 @@ def execute_run(model_id: str, config: dict, case: dict, output_root: Path, time
         os.chmod(record_path, 0o600)
     save()
     started = time.monotonic()
+    baseline_mib = sample_gpu_used_mib()
+    observed_peak_mib = baseline_mib
     try:
         with (destination / "upstream.log").open("w", encoding="utf-8") as log:
             proc = subprocess.Popen(args, cwd=cwd, stdout=log, stderr=subprocess.STDOUT,
                                     start_new_session=True)
-            try:
-                rc = proc.wait(timeout=timeout)
-            except subprocess.TimeoutExpired:
-                os.killpg(proc.pid, signal.SIGKILL)
-                proc.wait(timeout=15)
-                raise GateError("Upstream model timed out")
+            deadline = time.monotonic() + timeout
+            while proc.poll() is None:
+                sample = sample_gpu_used_mib()
+                if sample is not None:
+                    observed_peak_mib = max(observed_peak_mib or 0, sample)
+                if time.monotonic() >= deadline:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                    proc.wait(timeout=15)
+                    raise GateError("Upstream model timed out")
+                time.sleep(1.0)
+            rc = proc.returncode
         if rc != 0:
             raise GateError("Upstream exited nonzero; inspect private upstream.log")
         if model_id == "infinitetalk" and not expected.is_file():
@@ -315,6 +354,12 @@ def execute_run(model_id: str, config: dict, case: dict, output_root: Path, time
                        "elapsed_seconds": round(time.monotonic() - started, 3)})
         save()
         raise
+    record["gpu_memory"] = {
+        "baseline_system_used_mib": baseline_mib,
+        "observed_peak_system_used_mib": observed_peak_mib,
+        "sampling_interval_seconds": 1,
+        "caveat": "All-GPU system memory, may include unrelated processes and miss short peaks; NOT a model peak VRAM measurement."
+    }
     save()
     return record
 
