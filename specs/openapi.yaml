@@ -1,0 +1,523 @@
+openapi: 3.1.0
+info:
+  title: Baby Joy Mini Program API
+  version: 0.1.0-draft
+  description: >
+    微信小程序统一 API 草案。仅描述设计契约，尚未在真实服务上运行或验证。
+servers:
+  - url: https://api.example.invalid
+    description: 占位域名；正式部署必须配置合法微信小程序 HTTPS 域名
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+  - name: Consents
+  - name: Assets
+  - name: Jobs
+  - name: Privacy
+paths:
+  /v1/auth/wechat:
+    post:
+      tags: [Auth]
+      summary: 通过 wx.login code 建立本站会话
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WechatLoginRequest'
+      responses:
+        '200':
+          description: 本站短期访问令牌；不得包含微信 session_key/openid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /v1/me:
+    get:
+      tags: [Auth]
+      summary: 我的账户摘要
+      responses:
+        '200':
+          description: 仅本用户信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/policies:
+    get:
+      tags: [Consents]
+      summary: 最新隐私、AI 创作和儿童信息专门规则版本
+      security: []
+      responses:
+        '200':
+          description: 法律文本与版本摘要
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyList'
+  /v1/consents:
+    post:
+      tags: [Consents]
+      summary: 记录用途受限的监护人声明与知情同意
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentRequest'
+      responses:
+        '201':
+          description: 授权已记录，但不等于已完成所有法律核验
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentResponse'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/assets/images:
+    post:
+      tags: [Assets]
+      summary: 经 API 上传图片并交给服务端扫描
+      description: 仅父母或其他法定监护人可上传；最大 8 MiB；服务器验证文件类型、实际图像和归属。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        '202':
+          description: 上传受理；实际 READY 状态异步检查
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMedia'
+  /v1/assets/{asset_id}:
+    get:
+      tags: [Assets]
+      summary: 本人上传素材的安全状态
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: 返回状态，不返回对象存储原始地址
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/jobs:
+    post:
+      tags: [Jobs]
+      summary: 创建异步视频制作任务
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobCreateRequest'
+      responses:
+        '202':
+          description: 成功受理，立即返回 job_id，不等待 GPU
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAccepted'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    get:
+      tags: [Jobs]
+      summary: 分页获取本人任务
+      parameters:
+        - in: query
+          name: cursor
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        '200':
+          description: 当前用户任务列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobList'
+  /v1/jobs/{job_id}:
+    get:
+      tags: [Jobs]
+      summary: 获取任务当前阶段与真实终态
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: 任务详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Privacy]
+      summary: 删除本人任务与相关儿童素材
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '202':
+          description: 已接受删除请求；必须跟踪真实对象删除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletionAccepted'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/jobs/{job_id}/cancel:
+    post:
+      tags: [Jobs]
+      summary: 请求取消排队或运行中的任务
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '202':
+          description: 取消请求已接受；GPU 不一定能立即中断
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAccepted'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/jobs/{job_id}/retry:
+    post:
+      tags: [Jobs]
+      summary: 对允许重试的失败任务发起新尝试
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: 返回既有或新创建的任务 ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAccepted'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/jobs/{job_id}/download:
+    get:
+      tags: [Jobs]
+      summary: 生成本人完成态视频的短时效下载能力
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: 私有下载授权；URL 不得记录到分析系统
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadGrant'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/deletions/{deletion_id}:
+    get:
+      tags: [Privacy]
+      summary: 获取物理对象删除状态
+      parameters:
+        - in: path
+          name: deletion_id
+          required: true
+          schema: { type: string, minLength: 1 }
+      responses:
+        '200':
+          description: 删除状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deletion'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/feedback:
+    post:
+      tags: [Privacy]
+      summary: 仅提供脱敏问题反馈
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+      responses:
+        '202':
+          description: 已受理反馈
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [feedback_id]
+                properties:
+                  feedback_id: { type: string }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    JobId:
+      in: path
+      name: job_id
+      required: true
+      schema: { type: string, minLength: 1 }
+    AssetId:
+      in: path
+      name: asset_id
+      required: true
+      schema: { type: string, minLength: 1 }
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: true
+      schema: { type: string, minLength: 8, maxLength: 128 }
+      description: 同用户/端点同 key 同规范化请求返回同一任务；冲突为 409。
+  responses:
+    BadRequest:
+      description: 请求非法
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Unauthorized:
+      description: 未登录或 token 过期
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    NotFound:
+      description: 资源不存在或无权访问
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Unprocessable:
+      description: 素材或业务参数不符合要求
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    UnsupportedMedia:
+      description: 文件类型不受支持
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    TooLarge:
+      description: 文件超过限制
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    TooManyRequests:
+      description: 触发限流或配额
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Conflict:
+      description: 状态或幂等冲突
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  schemas:
+    WechatLoginRequest:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: { type: string, minLength: 1, maxLength: 512 }
+    AuthResponse:
+      type: object
+      additionalProperties: false
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, const: Bearer }
+        expires_in: { type: integer, minimum: 1 }
+    Me:
+      type: object
+      required: [user_id, guardian_consent_active]
+      properties:
+        user_id: { type: string }
+        guardian_consent_active: { type: boolean }
+    PolicyList:
+      type: object
+      required: [policies]
+      properties:
+        policies:
+          type: array
+          items:
+            type: object
+            required: [version, scope, text_url, digest]
+            properties:
+              version: { type: string }
+              scope: { type: string }
+              text_url: { type: string, format: uri }
+              digest: { type: string }
+    ConsentRequest:
+      type: object
+      additionalProperties: false
+      required: [policy_version, scope, guardian_declaration, purpose]
+      properties:
+        policy_version: { type: string, maxLength: 80 }
+        scope: { type: string, enum: [GUARDIAN_UPLOAD_AND_GENERATE] }
+        guardian_declaration: { type: boolean, const: true }
+        purpose: { type: string, enum: [FAMILY_GREETING] }
+    ConsentResponse:
+      type: object
+      required: [consent_id, recorded_at, policy_version]
+      properties:
+        consent_id: { type: string }
+        recorded_at: { type: string, format: date-time }
+        policy_version: { type: string }
+    Asset:
+      type: object
+      required: [asset_id, status]
+      properties:
+        asset_id: { type: string }
+        status:
+          type: string
+          enum: [PENDING_SCAN, READY, REJECTED, DELETING, DELETED]
+        reason_code: { type: [string, 'null'] }
+        request_id: { type: [string, 'null'] }
+    JobCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [asset_id, template_id, template_vars, voice_style, target_duration_seconds]
+      properties:
+        asset_id: { type: string }
+        template_id:
+          type: string
+          enum: [family_love_v1, birthday_v1, festival_v1]
+        template_vars:
+          type: object
+          additionalProperties: false
+          required: [baby_name]
+          properties:
+            baby_name: { type: string, maxLength: 20 }
+            recipient: { type: string, maxLength: 40 }
+        voice_style:
+          type: string
+          enum: [warm_childlike, playful_childlike, storybook]
+        target_duration_seconds:
+          type: integer
+          enum: [6, 8, 12]
+    JobStatus:
+      type: string
+      enum: [QUEUED, PREPROCESSING, SYNTHESIZING, GENERATING, QUALITY_CHECK, RENDERING, COMPLETED, REJECTED, FAILED, CANCELLED, EXPIRED]
+    JobAccepted:
+      type: object
+      required: [job_id, status, poll_after_seconds]
+      properties:
+        job_id: { type: string }
+        status: { $ref: '#/components/schemas/JobStatus' }
+        stage: { type: string }
+        poll_after_seconds: { type: integer, minimum: 1 }
+        request_id: { type: [string, 'null'] }
+    Job:
+      type: object
+      required: [job_id, status, stage, poll_after_seconds]
+      properties:
+        job_id: { type: string }
+        status: { $ref: '#/components/schemas/JobStatus' }
+        stage: { type: string }
+        stage_started_at: { type: [string, 'null'], format: date-time }
+        poll_after_seconds: { type: integer, minimum: 1 }
+        error:
+          anyOf:
+            - $ref: '#/components/schemas/JobError'
+            - type: 'null'
+        output:
+          anyOf:
+            - $ref: '#/components/schemas/JobOutput'
+            - type: 'null'
+    JobError:
+      type: object
+      required: [code, message, retryable]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        retryable: { type: boolean }
+    JobOutput:
+      type: object
+      required: [video_id, duration_seconds, width, height, ai_generated]
+      properties:
+        video_id: { type: string }
+        duration_seconds: { type: number, minimum: 0 }
+        width: { type: integer, minimum: 1 }
+        height: { type: integer, minimum: 1 }
+        ai_generated: { type: boolean, const: true }
+    JobList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Job' }
+        next_cursor: { type: [string, 'null'] }
+    DownloadGrant:
+      type: object
+      required: [url, expires_at]
+      properties:
+        url: { type: string, format: uri }
+        expires_at: { type: string, format: date-time }
+    DeletionAccepted:
+      type: object
+      required: [deletion_id, status]
+      properties:
+        deletion_id: { type: string }
+        status: { type: string, const: QUEUED }
+    Deletion:
+      type: object
+      required: [deletion_id, status]
+      properties:
+        deletion_id: { type: string }
+        status: { type: string, enum: [QUEUED, PROCESSING, COMPLETED, FAILED] }
+        completed_at: { type: [string, 'null'], format: date-time }
+    FeedbackRequest:
+      type: object
+      additionalProperties: false
+      required: [job_id, category]
+      properties:
+        job_id: { type: string }
+        category:
+          type: string
+          enum: [NOT_SIMILAR, LIP_SYNC, VIDEO_ARTIFACT, PRIVACY, OTHER]
+        message: { type: string, maxLength: 500 }
+    ErrorEnvelope:
+      type: object
+      required: [error, request_id]
+      properties:
+        request_id: { type: string }
+        error:
+          type: object
+          required: [code, message, retryable]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            retryable: { type: boolean }

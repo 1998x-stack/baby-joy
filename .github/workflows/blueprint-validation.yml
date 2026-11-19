@@ -1,0 +1,52 @@
+name: Blueprint validation
+
+on:
+  push:
+    branches:
+      - 'docs/**'
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install YAML parser
+        run: python -m pip install PyYAML==6.0.2
+      - name: Validate API YAML, refs, links, private files
+        run: python scripts/validate_blueprint.py
+
+  sql-schema:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: babyjoy
+          POSTGRES_PASSWORD: test-password
+          POSTGRES_DB: babyjoy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U babyjoy -d babyjoy"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL CLI
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Execute draft SQL on clean PostgreSQL 16
+        env:
+          PGPASSWORD: test-password
+        run: |
+          psql -h 127.0.0.1 -U babyjoy -d babyjoy -v ON_ERROR_STOP=1 -f specs/001_initial.sql
+          count=$(psql -h 127.0.0.1 -U babyjoy -d babyjoy -tAc "select count(*) from pg_tables where schemaname='public'")
+          test "$count" -eq 13
+          echo "PASS: 13 tables created"

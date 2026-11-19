@@ -1,0 +1,35 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+.secrets/
+apps/miniprogram/project.private.config.json
+# Python / Node
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+node_modules/
+dist/
+build/
+# Never commit private child media or generated weights.
+# Do NOT globally ignore *.png/*.jpg/*.wav: licensed UI artwork may be needed.
+data/
+private/
+storage/
+uploads/
+outputs/
+checkpoints/
+weights/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+# Logs and OS
+*.log
+.DS_Store
