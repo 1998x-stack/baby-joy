@@ -10,7 +10,7 @@ from babyjoy_phase0.cli import main
 from babyjoy_phase0.evaluation import summarize_ratings, wilson
 from babyjoy_phase0.harness import (
     GateError, build_command, check_approval, check_gpu, check_weights,
-    check_repo_revision, sample_gpu_used_mib,
+    check_repo_revision, sample_gpu_used_mib, safe_vendor_env,
     load_json, private_file, probe_video, read_cases, report,
 )
 
@@ -164,6 +164,22 @@ class Phase0HarnessTest(unittest.TestCase):
         # On CPU CI this will be None; on GPU-backed runners it may be an integer.
         value = sample_gpu_used_mib()
         self.assertTrue(value is None or (type(value) is int and value >= 0))
+
+    def test_vendor_env_does_not_inherit_api_secrets(self):
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "do-not-pass",
+                                     "AWS_SECRET_ACCESS_KEY": "do-not-pass"}, clear=False):
+            env = safe_vendor_env()
+        self.assertNotIn("OPENAI_API_KEY", env)
+        self.assertNotIn("AWS_SECRET_ACCESS_KEY", env)
+        self.assertEqual(env["HF_HUB_OFFLINE"], "1")
+
+    def test_vendor_env_blocks_huggingface_online_mode(self):
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"HF_HUB_OFFLINE": "0"}, clear=False):
+            self.assertEqual(safe_vendor_env()["HF_HUB_OFFLINE"], "1")
 
     def test_empty_run_report_not_run(self):
         self.assertEqual(report(self.root / "nonexistent")["status"], "NOT_RUN")

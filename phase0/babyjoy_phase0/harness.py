@@ -1,7 +1,8 @@
-"""Local Phase 0 harness. Never sends private inputs to a remote service.
+"""Local Phase 0 research harness.
 
-The upstream model environments and checkpoints are supplied by the operator,
-not downloaded or executed by this package.
+This package never explicitly uploads media or downloads checkpoints. Upstream
+model scripts are executable third-party code: run them inside an egress-blocked,
+credential-free container and audit dependencies before using private images.
 """
 from __future__ import annotations
 
@@ -180,6 +181,21 @@ def sample_gpu_used_mib() -> int | None:
         return None
 
 
+def safe_vendor_env() -> dict[str, str]:
+    """Do not inherit arbitrary credentials into third-party model scripts."""
+    allow = {
+        "PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "VIRTUAL_ENV", "CONDA_PREFIX",
+        "LD_LIBRARY_PATH", "PYTHONPATH", "CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER",
+        "PYTORCH_CUDA_ALLOC_CONF", "TORCH_HOME", "HF_HOME", "XDG_CACHE_HOME",
+        "OMP_NUM_THREADS", "NCCL_DEBUG", "TOKENIZERS_PARALLELISM",
+    }
+    env = {k: v for k, v in os.environ.items() if k in allow}
+    # Defense in depth; only firewall/network namespace can guarantee no egress.
+    env.update({"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1",
+                "HF_DATASETS_OFFLINE": "1"})
+    return env
+
+
 def check_gpu() -> str:
     if not shutil.which("nvidia-smi"):
         raise GateError("No nvidia-smi available: real GPU inference NOT RUN")
@@ -323,7 +339,7 @@ def execute_run(model_id: str, config: dict, case: dict, output_root: Path, time
     try:
         with (destination / "upstream.log").open("w", encoding="utf-8") as log:
             proc = subprocess.Popen(args, cwd=cwd, stdout=log, stderr=subprocess.STDOUT,
-                                    start_new_session=True)
+                                    start_new_session=True, env=safe_vendor_env())
             deadline = time.monotonic() + timeout
             while proc.poll() is None:
                 sample = sample_gpu_used_mib()

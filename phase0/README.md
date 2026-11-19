@@ -86,3 +86,7 @@ PYTHONPATH=phase0 python -m unittest discover -s phase0/tests -v
 本项目拒绝自动下载、不允许将任意远端 URL 作为儿童图像输入、不在 CLI stdout 打印图像路径/昵称、不会把案例文件送入 GitHub CI。GPU 运行前人工复核每条儿童素材授权，并检查本地目录权限、操作员和第三方进程边界。每个模型依赖许可审查单独保存，不许因为 GitHub repo 标为 Apache 就自称权重已批准。
 
 后续可新增 `nvml` 连续采样、GPU 利用率/显存峰值和 TTS 统一基线；当前只保存 `nvidia-smi` 的设备元数据和端到端 wall time，**没有推理显存峰值指标**。
+
+## 7. 第三方模型源码隔离（必须）
+
+模型仓库脚本属于第三方可执行代码。CLI 目前为子进程仅传递必要的环境变量，并设置 `HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1`，以防模型 SDK 自动拉取 checkpoint；**这并不能从操作系统层面禁止网络连接**。正式执行前须在 Docker/容器/namespace 中关闭不必要的公网出站连接，挂载只读 model weights，使用无云账户凭据的运行身份，仅授权读取当前测试案例，禁止访问其他家庭媒体。未经审查的上游脚本不能直接在保存真实用户数据的主机/账户权限下执行。
